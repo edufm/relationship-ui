@@ -1,0 +1,85 @@
+{
+  "entityTypes": [
+    { "id": "category", "label": "Categoria" },
+    { "id": "continent", "label": "Continente" },
+    { "id": "country", "label": "País" },
+    { "id": "city", "label": "Cidade" },
+    { "id": "landmark", "label": "Monumento" }
+  ],
+  "entities": [
+    { "id": "cat-monumentos", "typeId": "category", "label": "Monumentos" },
+
+    { "id": "cont-america-norte", "typeId": "continent", "label": "América do Norte" },
+    { "id": "cont-america-sul", "typeId": "continent", "label": "América do Sul" },
+    { "id": "cont-asia", "typeId": "continent", "label": "Ásia" },
+
+    { "id": "country-argentina", "typeId": "country", "label": "Argentina" },
+    { "id": "country-brasil", "typeId": "country", "label": "Brasil" },
+    { "id": "country-peru", "typeId": "country", "label": "Peru" },
+    { "id": "country-eua", "typeId": "country", "label": "Estados Unidos" },
+    { "id": "country-mexico", "typeId": "country", "label": "México" },
+    { "id": "country-japao", "typeId": "country", "label": "Japão" },
+    { "id": "country-china", "typeId": "country", "label": "China" },
+
+    { "id": "city-sao-paulo", "typeId": "city", "label": "São Paulo" },
+    { "id": "city-rio-de-janeiro", "typeId": "city", "label": "Rio de Janeiro" },
+    { "id": "city-buenos-aires", "typeId": "city", "label": "Buenos Aires" },
+    { "id": "city-cusco", "typeId": "city", "label": "Cusco" },
+    { "id": "city-nova-york", "typeId": "city", "label": "Nova York" },
+    { "id": "city-washington", "typeId": "city", "label": "Washington" },
+    { "id": "city-cidade-do-mexico", "typeId": "city", "label": "Cidade do México" },
+    { "id": "city-toquio", "typeId": "city", "label": "Tóquio" },
+    { "id": "city-pequim", "typeId": "city", "label": "Pequim" },
+
+    { "id": "landmark-masp", "typeId": "landmark", "label": "Masp" },
+    { "id": "landmark-oca", "typeId": "landmark", "label": "Oca" },
+    { "id": "landmark-ponte-estaiada", "typeId": "landmark", "label": "Ponte Estaiada" },
+    { "id": "landmark-cristo-redentor", "typeId": "landmark", "label": "Cristo Redentor" },
+    { "id": "landmark-pao-de-acucar", "typeId": "landmark", "label": "Pão de Açúcar" },
+    { "id": "landmark-obelisco", "typeId": "landmark", "label": "Obelisco" },
+    { "id": "landmark-casa-rosada", "typeId": "landmark", "label": "Casa Rosada" },
+    { "id": "landmark-machu-picchu", "typeId": "landmark", "label": "Machu Picchu" },
+    { "id": "landmark-estatua-liberdade", "typeId": "landmark", "label": "Estátua da Liberdade" },
+    { "id": "landmark-casa-branca", "typeId": "landmark", "label": "Casa Branca" },
+    { "id": "landmark-templo-mayor", "typeId": "landmark", "label": "Templo Mayor" },
+    { "id": "landmark-senso-ji", "typeId": "landmark", "label": "Templo Senso-ji" },
+    { "id": "landmark-grande-muralha", "typeId": "landmark", "label": "Grande Muralha" }
+  ],
+  "relations": [
+    { "fromId": "cat-monumentos", "toId": "cont-america-norte" },
+    { "fromId": "cat-monumentos", "toId": "cont-america-sul" },
+    { "fromId": "cat-monumentos", "toId": "cont-asia" },
+
+    { "fromId": "cont-america-sul", "toId": "country-argentina" },
+    { "fromId": "cont-america-sul", "toId": "country-brasil" },
+    { "fromId": "cont-america-sul", "toId": "country-peru" },
+    { "fromId": "cont-america-norte", "toId": "country-eua" },
+    { "fromId": "cont-america-norte", "toId": "country-mexico" },
+    { "fromId": "cont-asia", "toId": "country-japao" },
+    { "fromId": "cont-asia", "toId": "country-china" },
+
+    { "fromId": "country-brasil", "toId": "city-sao-paulo" },
+    { "fromId": "country-brasil", "toId": "city-rio-de-janeiro" },
+    { "fromId": "country-argentina", "toId": "city-buenos-aires" },
+    { "fromId": "country-peru", "toId": "city-cusco" },
+    { "fromId": "country-eua", "toId": "city-nova-york" },
+    { "fromId": "country-eua", "toId": "city-washington" },
+    { "fromId": "country-mexico", "toId": "city-cidade-do-mexico" },
+    { "fromId": "country-japao", "toId": "city-toquio" },
+    { "fromId": "country-china", "toId": "city-pequim" },
+
+    { "fromId": "city-sao-paulo", "toId": "landmark-masp" },
+    { "fromId": "city-sao-paulo", "toId": "landmark-oca" },
+    { "fromId": "city-sao-paulo", "toId": "landmark-ponte-estaiada" },
+    { "fromId": "city-rio-de-janeiro", "toId": "landmark-cristo-redentor" },
+    { "fromId": "city-rio-de-janeiro", "toId": "landmark-pao-de-acucar" },
+    { "fromId": "city-buenos-aires", "toId": "landmark-obelisco" },
+    { "fromId": "city-buenos-aires", "toId": "landmark-casa-rosada" },
+    { "fromId": "city-cusco", "toId": "landmark-machu-picchu" },
+    { "fromId": "city-nova-york", "toId": "landmark-estatua-liberdade" },
+    { "fromId": "city-washington", "toId": "landmark-casa-branca" },
+    { "fromId": "city-cidade-do-mexico", "toId": "landmark-templo-mayor" },
+    { "fromId": "city-toquio", "toId": "landmark-senso-ji" },
+    { "fromId": "city-pequim", "toId": "landmark-grande-muralha" }
+  ]
+}

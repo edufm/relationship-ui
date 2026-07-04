@@ -1,0 +1,34 @@
+:root {
+  --void: #0c0f16;
+  --void-core: #171d29;
+  --ring-track: #303c49;
+  --ring-label: #93a1af;
+  --planet-fill: #161b24;
+  --planet-stroke: #3d4a58;
+  --planet-text: #c7ccd4;
+  --brass: #c9a227;
+  --brass-bright: #e8c766;
+  --brass-ink: #1a1305;
+  --axis: rgba(201, 162, 39, 0.55);
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-body: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: radial-gradient(circle at center, var(--void-core) 0%, var(--void) 70%);
+  font-family: var(--font-body);
+}

@@ -1,0 +1,111 @@
+.orbit-explorer {
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  touch-action: none;
+}
+
+.orbit-frame {
+  fill: none;
+  stroke: var(--ring-track);
+  stroke-width: 1;
+}
+
+.reference-axis-line {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.reference-axis-tick {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.reference-axis-head {
+  fill: var(--brass);
+}
+
+.ring-track-visual {
+  fill: none;
+  stroke: var(--ring-track);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.ring-track-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 28;
+  cursor: ns-resize;
+}
+
+.ring-type-label {
+  fill: var(--ring-label);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ring-empty-label {
+  fill: var(--ring-label);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-style: italic;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.ring-group {
+  cursor: grab;
+}
+
+.ring-group:active {
+  cursor: grabbing;
+}
+
+.ring-group:focus {
+  outline: none;
+}
+
+.ring-group:focus-visible .planet-circle {
+  stroke: var(--brass-bright);
+}
+
+.planet-circle {
+  fill: var(--planet-fill);
+  stroke: var(--planet-stroke);
+  stroke-width: 1.5;
+  transition: fill 150ms ease, stroke 150ms ease;
+}
+
+.planet-label {
+  fill: var(--planet-text);
+  font-size: 11px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  pointer-events: none;
+  user-select: none;
+  transition: fill 150ms ease;
+}
+
+.planet-selected .planet-circle {
+  fill: var(--brass);
+  stroke: var(--brass-bright);
+  filter: drop-shadow(0 0 6px rgba(201, 162, 39, 0.45));
+}
+
+.planet-selected .planet-label {
+  fill: var(--brass-ink);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .planet-circle,
+  .planet-label {
+    transition: none;
+  }
+}

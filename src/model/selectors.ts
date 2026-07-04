@@ -1,0 +1,148 @@
+import type { Dataset, Entity, EntityId, EntityTypeId } from './types';
+
+export type SelectionMap = Record<EntityTypeId, EntityId | null>;
+
+/** Entities of `typeId` directly related (in either direction) to `sourceId`. */
+export function relatedEntitiesOfType(dataset: Dataset, typeId: EntityTypeId, sourceId: EntityId): Entity[] {
+  const relatedIds = new Set<EntityId>();
+  for (const relation of dataset.relations) {
+    if (relation.fromId === sourceId) relatedIds.add(relation.toId);
+    else if (relation.toId === sourceId) relatedIds.add(relation.fromId);
+  }
+  return dataset.entities.filter((e) => e.typeId === typeId && relatedIds.has(e.id));
+}
+
+/**
+ * Entities of ringOrder[ringIndex]'s type that are valid candidates given the
+ * current selection of the ring just inside it. Ring 0 (innermost) has no
+ * parent, so every entity of its type is a candidate.
+ */
+export function candidatesForRing(
+  dataset: Dataset,
+  ringOrder: EntityTypeId[],
+  selected: SelectionMap,
+  ringIndex: number,
+): Entity[] {
+  const typeId = ringOrder[ringIndex];
+
+  if (ringIndex === 0) {
+    return dataset.entities.filter((e) => e.typeId === typeId);
+  }
+
+  const parentTypeId = ringOrder[ringIndex - 1];
+  const parentSelectedId = selected[parentTypeId];
+  if (parentSelectedId == null) return [];
+
+  return relatedEntitiesOfType(dataset, typeId, parentSelectedId);
+}
+
+/**
+ * Recomputes selections for every ring from startIndex outward, cascading:
+ * if a ring's previously selected entity is no longer a valid candidate
+ * (because an inner selection or the ring order changed), it defaults to the
+ * first available candidate (or null if there are none).
+ */
+export function recomputeFrom(
+  dataset: Dataset,
+  ringOrder: EntityTypeId[],
+  selected: SelectionMap,
+  startIndex: number,
+): SelectionMap {
+  const next: SelectionMap = { ...selected };
+
+  for (let i = startIndex; i < ringOrder.length; i++) {
+    const typeId = ringOrder[i];
+    const candidates = candidatesForRing(dataset, ringOrder, next, i);
+    const currentSelectedId = next[typeId];
+    const stillValid = candidates.some((c) => c.id === currentSelectedId);
+    if (!stillValid) {
+      next[typeId] = candidates.length > 0 ? candidates[0].id : null;
+    }
+  }
+
+  return next;
+}
+
+export interface RingDisplayList {
+  /** The ring's candidates plus, when there aren't enough to fill the visible window, entities
+   * borrowed from the parent ring's neighboring (non-selected) entities — so scrolling past the
+   * selected parent's own children continues into what the entity above/below it would show. */
+  entities: Entity[];
+  /** Index within `entities` of core[0] — the stable origin that absolute slots (and thus
+   * rotation) are measured from. NOT the currently-selected entity's index: that would shift
+   * with every new selection and break rotation's meaning as a stable, absolute encoding. */
+  originOffset: number;
+}
+
+/**
+ * Builds the display list for one ring, extending its own candidates with entities related to
+ * the parent ring's neighboring entities (above and below the parent's selection) when the
+ * selected parent alone doesn't have enough children to fill `halfWindow` slots on either side.
+ */
+export function buildRingDisplayList(
+  dataset: Dataset,
+  ringOrder: EntityTypeId[],
+  selected: SelectionMap,
+  ringIndex: number,
+  halfWindow: number,
+): RingDisplayList {
+  const typeId = ringOrder[ringIndex];
+  const core = candidatesForRing(dataset, ringOrder, selected, ringIndex);
+  const coreAnchor = Math.max(0, core.findIndex((c) => c.id === selected[typeId]));
+
+  if (ringIndex === 0 || core.length === 0) {
+    return { entities: core, originOffset: 0 };
+  }
+
+  const aboveDeficit = Math.max(0, halfWindow - coreAnchor);
+  const belowDeficit = Math.max(0, halfWindow - (core.length - 1 - coreAnchor));
+
+  let aboveOverflow: Entity[] = [];
+  let belowOverflow: Entity[] = [];
+
+  if (aboveDeficit > 0 || belowDeficit > 0) {
+    const parentTypeId = ringOrder[ringIndex - 1];
+    const parentCandidates = candidatesForRing(dataset, ringOrder, selected, ringIndex - 1);
+    const parentN = parentCandidates.length;
+
+    // Based on the parent's committed selection, not its live (possibly mid-animation) rotation —
+    // using rotation here would make the borrowed set flicker between neighbors while the parent
+    // ring's own snap animation is still in flight.
+    const parentK = Math.max(0, parentCandidates.findIndex((c) => c.id === selected[parentTypeId]));
+
+    // Walk outward toward the parent's own list boundaries — never wrapping around — so "above"/
+    // "below" here always matches what the parent ring itself shows above/below its selection
+    // (the parent ring's own display doesn't wrap either; see buildRingDisplayList/RingGroup).
+    if (aboveDeficit > 0) {
+      const chunks: Entity[][] = [];
+      let count = 0;
+      let i = parentK - 1;
+      while (count < aboveDeficit && i >= 0) {
+        const chunk = relatedEntitiesOfType(dataset, typeId, parentCandidates[i].id);
+        chunks.push(chunk);
+        count += chunk.length;
+        i -= 1;
+      }
+      // Nearest neighbor (parentK-1) contributes last, so its children end up adjacent to core.
+      aboveOverflow = chunks.slice().reverse().flat();
+    }
+
+    if (belowDeficit > 0) {
+      const chunks: Entity[][] = [];
+      let count = 0;
+      let i = parentK + 1;
+      while (count < belowDeficit && i < parentN) {
+        const chunk = relatedEntitiesOfType(dataset, typeId, parentCandidates[i].id);
+        chunks.push(chunk);
+        count += chunk.length;
+        i += 1;
+      }
+      belowOverflow = chunks.flat();
+    }
+  }
+
+  return {
+    entities: [...aboveOverflow, ...core, ...belowOverflow],
+    originOffset: aboveOverflow.length,
+  };
+}
