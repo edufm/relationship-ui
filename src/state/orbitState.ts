@@ -117,8 +117,11 @@ export function createOrbitReducer(dataset: Dataset) {
       case 'REORDER_COMMIT': {
         const { fromIndex, toIndex } = action;
         if (fromIndex === toIndex) return { ...state, interaction: { kind: 'idle' } };
+        // Move (not swap): the dragged ring lands exactly where it was dropped — across any
+        // number of levels — and the rings in between slide one position to make room.
         const newRingOrder = [...state.ringOrder];
-        [newRingOrder[fromIndex], newRingOrder[toIndex]] = [newRingOrder[toIndex], newRingOrder[fromIndex]];
+        const [moved] = newRingOrder.splice(fromIndex, 1);
+        newRingOrder.splice(toIndex, 0, moved);
         const startIndex = Math.min(fromIndex, toIndex);
         const { selected, rotation } = cascade(dataset, newRingOrder, state.selected, state.rotation, startIndex);
         return { ...state, ringOrder: newRingOrder, selected, rotation, interaction: { kind: 'idle' } };

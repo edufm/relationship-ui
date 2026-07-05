@@ -1,6 +1,6 @@
 import { useRef, useState, type PointerEvent, type RefObject } from 'react';
 import { useOrbit } from '../state/OrbitContext';
-import { radiusForIndex } from '../geometry/ring';
+import { BASE_RADIUS, RING_GAP, radiusForIndex } from '../geometry/ring';
 import { clientToLocalPoint } from '../geometry/pointer';
 import { PLANET_RADIUS } from './Planet';
 
@@ -59,18 +59,10 @@ export function RingTrack({ typeId, index, label, svgRef }: RingTrackProps) {
     if (!dragStart.current) return;
     const finalRadius = dragRadius ?? radius;
     const currentIndex = state.ringOrder.indexOf(typeId);
-    let targetIndex = currentIndex;
-
-    const prevIndex = currentIndex - 1;
-    if (prevIndex >= 0) {
-      const midpoint = (radiusForIndex(prevIndex) + radius) / 2;
-      if (finalRadius < midpoint) targetIndex = prevIndex;
-    }
-    const nextIndex = currentIndex + 1;
-    if (nextIndex < state.ringOrder.length) {
-      const midpoint = (radius + radiusForIndex(nextIndex)) / 2;
-      if (finalRadius > midpoint) targetIndex = nextIndex;
-    }
+    // Nearest ring slot to where the drag was released — any number of levels away, not just a
+    // neighbor. The reducer moves the ring there and slides the ones in between.
+    const nearestSlot = Math.round((finalRadius - BASE_RADIUS) / RING_GAP);
+    const targetIndex = Math.max(0, Math.min(state.ringOrder.length - 1, nearestSlot));
 
     dispatch({ type: 'REORDER_COMMIT', fromIndex: currentIndex, toIndex: targetIndex });
     dragStart.current = null;
