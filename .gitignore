@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Exports pessoais de fotos (dados privados, nao commitar)
+fotos*.csv

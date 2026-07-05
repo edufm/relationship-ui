@@ -16,6 +16,11 @@ export function relatedEntitiesOfType(dataset: Dataset, typeId: EntityTypeId, so
  * Entities of ringOrder[ringIndex]'s type that are valid candidates given the
  * current selection of the ring just inside it. Ring 0 (innermost) has no
  * parent, so every entity of its type is a candidate.
+ *
+ * Rings whose type has nothing related to the current chain select null; they are skipped —
+ * the anchor is the nearest inner ring that HAS a selection. Otherwise one data-less link
+ * (e.g. photos without location) would blank every ring outside it, even when relations to the
+ * inner rings exist (co-occurrence datasets relate every attribute pair directly).
  */
 export function candidatesForRing(
   dataset: Dataset,
@@ -29,11 +34,11 @@ export function candidatesForRing(
     return dataset.entities.filter((e) => e.typeId === typeId);
   }
 
-  const parentTypeId = ringOrder[ringIndex - 1];
-  const parentSelectedId = selected[parentTypeId];
-  if (parentSelectedId == null) return [];
-
-  return relatedEntitiesOfType(dataset, typeId, parentSelectedId);
+  for (let i = ringIndex - 1; i >= 0; i--) {
+    const anchorId = selected[ringOrder[i]];
+    if (anchorId != null) return relatedEntitiesOfType(dataset, typeId, anchorId);
+  }
+  return [];
 }
 
 /**
@@ -133,7 +138,9 @@ export function buildRingDisplayList(
   const coreAnchor = Math.max(0, core.findIndex((c) => c.id === selected[typeId]));
   const borrowedFrom = new Map<EntityId, EntityId>();
 
-  if (ringIndex === 0 || core.length === 0) {
+  // An empty core is NOT an early exit: when the selected parent (or skip-anchor) has no
+  // children of this type, the ring can still fill entirely with borrowed neighbors.
+  if (ringIndex === 0) {
     return { entities: core, originOffset: 0, coreLength: core.length, borrowedFrom };
   }
 
