@@ -2,14 +2,60 @@ import type { Dataset, Entity, EntityId, EntityTypeId } from './types';
 
 export type SelectionMap = Record<EntityTypeId, EntityId | null>;
 
+/** Lazily-built adjacency index for a dataset, so selection math doesn't rescan every relation. */
+interface DatasetIndex {
+  /** Entities of each type, preserving dataset order (which drives ring ordering). */
+  entitiesByType: Map<EntityTypeId, Entity[]>;
+  neighborsByEntity: Map<EntityId, Set<EntityId>>;
+  /** Unordered type pairs for which at least one relation exists — tells whether filtering one type by another is meaningful at all. */
+  relatedTypePairs: Set<string>;
+}
+
+const indexCache = new WeakMap<Dataset, DatasetIndex>();
+
+function typePairKey(a: EntityTypeId, b: EntityTypeId): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function getDatasetIndex(dataset: Dataset): DatasetIndex {
+  const cached = indexCache.get(dataset);
+  if (cached) return cached;
+
+  const entitiesByType = new Map<EntityTypeId, Entity[]>();
+  const typeByEntity = new Map<EntityId, EntityTypeId>();
+  for (const entity of dataset.entities) {
+    const list = entitiesByType.get(entity.typeId);
+    if (list) list.push(entity);
+    else entitiesByType.set(entity.typeId, [entity]);
+    typeByEntity.set(entity.id, entity.typeId);
+  }
+
+  const neighborsByEntity = new Map<EntityId, Set<EntityId>>();
+  const relatedTypePairs = new Set<string>();
+  const addNeighbor = (a: EntityId, b: EntityId) => {
+    const set = neighborsByEntity.get(a);
+    if (set) set.add(b);
+    else neighborsByEntity.set(a, new Set([b]));
+  };
+  for (const relation of dataset.relations) {
+    addNeighbor(relation.fromId, relation.toId);
+    addNeighbor(relation.toId, relation.fromId);
+    const fromType = typeByEntity.get(relation.fromId);
+    const toType = typeByEntity.get(relation.toId);
+    if (fromType != null && toType != null) relatedTypePairs.add(typePairKey(fromType, toType));
+  }
+
+  const index = { entitiesByType, neighborsByEntity, relatedTypePairs };
+  indexCache.set(dataset, index);
+  return index;
+}
+
 /** Entities of `typeId` directly related (in either direction) to `sourceId`. */
 export function relatedEntitiesOfType(dataset: Dataset, typeId: EntityTypeId, sourceId: EntityId): Entity[] {
-  const relatedIds = new Set<EntityId>();
-  for (const relation of dataset.relations) {
-    if (relation.fromId === sourceId) relatedIds.add(relation.toId);
-    else if (relation.toId === sourceId) relatedIds.add(relation.fromId);
-  }
-  return dataset.entities.filter((e) => e.typeId === typeId && relatedIds.has(e.id));
+  const { entitiesByType, neighborsByEntity } = getDatasetIndex(dataset);
+  const neighbors = neighborsByEntity.get(sourceId);
+  if (!neighbors) return [];
+  return (entitiesByType.get(typeId) ?? []).filter((e) => neighbors.has(e.id));
 }
 
 /**
@@ -21,6 +67,12 @@ export function relatedEntitiesOfType(dataset: Dataset, typeId: EntityTypeId, so
  * the anchor is the nearest inner ring that HAS a selection. Otherwise one data-less link
  * (e.g. photos without location) would blank every ring outside it, even when relations to the
  * inner rings exist (co-occurrence datasets relate every attribute pair directly).
+ *
+ * Filtering is cumulative: after anchoring, candidates are further intersected with every other
+ * selected inner ring whose type is related to this one at all. In a co-occurrence dataset that
+ * makes the photo ring show only photos matching the whole selected chain (year AND day AND
+ * place AND person); in FK-chain datasets unrelated type pairs are skipped, so per-neighbor
+ * behavior is preserved.
  */
 export function candidatesForRing(
   dataset: Dataset,
@@ -29,16 +81,31 @@ export function candidatesForRing(
   ringIndex: number,
 ): Entity[] {
   const typeId = ringOrder[ringIndex];
+  const { entitiesByType, neighborsByEntity, relatedTypePairs } = getDatasetIndex(dataset);
 
   if (ringIndex === 0) {
-    return dataset.entities.filter((e) => e.typeId === typeId);
+    return entitiesByType.get(typeId) ?? [];
   }
 
+  let anchorIndex = -1;
   for (let i = ringIndex - 1; i >= 0; i--) {
-    const anchorId = selected[ringOrder[i]];
-    if (anchorId != null) return relatedEntitiesOfType(dataset, typeId, anchorId);
+    if (selected[ringOrder[i]] != null) {
+      anchorIndex = i;
+      break;
+    }
   }
-  return [];
+  if (anchorIndex === -1) return [];
+
+  let candidates = relatedEntitiesOfType(dataset, typeId, selected[ringOrder[anchorIndex]]!);
+
+  for (let i = anchorIndex - 1; i >= 0 && candidates.length > 0; i--) {
+    const innerId = selected[ringOrder[i]];
+    if (innerId == null || !relatedTypePairs.has(typePairKey(typeId, ringOrder[i]))) continue;
+    const innerNeighbors = neighborsByEntity.get(innerId);
+    candidates = candidates.filter((c) => innerNeighbors?.has(c.id));
+  }
+
+  return candidates;
 }
 
 /**
