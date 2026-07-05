@@ -85,15 +85,24 @@ export function RingGroup({ typeId, index, label, viewportHalfHeight, svgRef }: 
   const prevFrameRef = useRef<{ ids: string[]; originOffset: number; rotation: number } | null>(null);
 
   // liveRotationRef tracks every rotation value this component itself produced (drags, snaps,
-  // cascade tweens). So a state rotation that differs from it can only have come from the
-  // reducer re-aligning this ring after a selection cascade or a ring reorder — and instead of
-  // letting the ring teleport to the new alignment, we start it where the selected entity was
+  // cascade tweens), and this ring's own frames never change the display list. So a frame where
+  // the rotation differs from it OR the list/origin changed can only be the reducer re-computing
+  // this ring after a selection cascade or ring reorder. (Rotation alone isn't enough: on outer
+  // rings the new alignment is often numerically identical — usually 0 — and only the list
+  // shifts.) Instead of letting the ring teleport, we start it where the selected entity was
   // last painted and tween it onto the axis. Layout effect (not effect) so the correction lands
   // before the teleported frame is ever painted.
   useLayoutEffect(() => {
     const prev = prevFrameRef.current;
     prevFrameRef.current = { ids: entities.map((e) => e.id), originOffset, rotation };
-    if (draggingRef.current || rotation === liveRotationRef.current) return;
+    if (draggingRef.current) return;
+
+    const listChanged =
+      prev == null ||
+      prev.originOffset !== originOffset ||
+      prev.ids.length !== entities.length ||
+      prev.ids.some((id, i) => id !== entities[i].id);
+    if (rotation === liveRotationRef.current && !listChanged) return;
 
     let startRotation: number | null = null;
     if (prev && selectedId != null) {
