@@ -13,7 +13,16 @@ npm install
 npm run dev
 ```
 
-Dataset de exemplo em `src/data/monuments.json` (Continente → País → Cidade → Monumento, com o nome do dataset como sol), recriando o rascunho original do projeto. Entidades podem ter um campo `properties` (chave→valor) exibido na barra lateral.
+## Fontes de dados
+
+A tela inicial oferece três fontes:
+
+- **Dataset de exemplo** (`src/data/monuments.json`): Continente → País → Cidade → Monumento, recriando o rascunho original. Entidades podem ter `properties` (chave→valor) exibidas na barra lateral.
+- **CSV de fotos** (ex.: exportado do Immich): uma linha por foto com colunas `data, local, pessoas, tags, albuns, arquivo` (multivalores separados por `;`). O loader (`src/data/photoCsv.ts`) agrega em órbitas **Ano → Mês → Dia → Localização → Pessoa → Tag → Álbum → Foto**, com relações por coocorrência (todo atributo de uma foto se relaciona com os demais), então os anéis podem ser arrastados pra **qualquer** ordem — ex.: Pessoa → Ano mostra em que anos aquela pessoa aparece. Cada entidade agregada traz a contagem de fotos nas `properties`. CSVs grandes são amostrados uniformemente (~4.000 fotos) pra cobrir todos os anos. Query pronta pro Immich em `scripts/immich-photos.sql`:
+  ```bash
+  docker exec -i immich-postgres psql -U immich -d immich -f - < scripts/immich-photos.sql > fotos.csv
+  ```
+- **Postgres ao vivo**: informe a connection string, marque as tabelas de interesse e o app lê o ERD (foreign keys) pra montar o dataset — tabela=tipo/órbita, linha=planeta, FK=relação, colunas=`properties`. O backend é um middleware do próprio Vite (`server/pgApi.ts`, endpoints `/api/pg/*`): conexão **somente leitura** (`default_transaction_read_only`), identificadores escapados, colunas sensíveis (senha/token/segredo) nunca saem do servidor, tipos não-escalares (bytea, vector) são ignorados. Tabelas de junção não selecionadas (ex.: `album_asset`) são colapsadas em relações diretas; a busca de linhas caminha o grafo FK a partir da tabela mais interna (BFS, ~250 linhas/tabela) pra trazer um subgrafo conexo em vez de fatias soltas; e a ordem inicial dos anéis é uma cadeia que mantém anéis vizinhos conectados por FK (hubs no meio).
 
 ## O que já foi construído
 
@@ -36,5 +45,6 @@ Dataset de exemplo em `src/data/monuments.json` (Continente → País → Cidade
 
 ## Planejado
 
-- **Permitir conexão com banco Postgres** usando as foreign keys como relacionamentos. Precisa de decisão de arquitetura: um script offline que introspecta o schema e gera o JSON do dataset, ou um backend pequeno servindo o dataset em tempo real.
+- **Ontologias (fase 2)**: ler Turtle/SKOS (ex.: [Athena](https://github.com/artemis-tech/Athena)). Exige uma decisão de modelagem — as hierarquias SKOS são árvores profundas dentro de um mesmo tipo (`skos:broader`), então anel = nível de profundidade em vez de anel = tipo — e fatiar os ~527k triplas antes de chegar ao browser.
 - **Clique também seleciona**: hoje o clique só abre a barra lateral; talvez girar o anel até o planeta clicado ao mesmo tempo.
+- **Filtragem cumulativa opcional**: a cascata filtra cada anel só pelo vizinho de dentro; num modo "interseção", o anel de fotos mostraria apenas fotos que casam com a cadeia inteira selecionada.

@@ -1,0 +1,19 @@
+data,local,pessoas,tags,albuns,arquivo
+2023-01-14,Rio de Janeiro,Ana;Bruno,beach;sunset,Férias 2023,IMG_0101.jpg
+2023-01-14,Rio de Janeiro,Ana,beach,Férias 2023,IMG_0102.jpg
+2023-01-15,Rio de Janeiro,Bruno,food,Férias 2023,IMG_0110.jpg
+2023-02-03,São Paulo,Carla,city;night,,IMG_0201.jpg
+2023-02-04,São Paulo,Ana;Carla,city,Trampo,IMG_0202.jpg
+2023-07-22,Gramado,Ana;Bruno;Carla,mountain;winter,Inverno na serra,IMG_0301.jpg
+2023-07-22,Gramado,Bruno,mountain;food,Inverno na serra,IMG_0302.jpg
+2023-07-23,Gramado,Ana,winter;sunset,Inverno na serra,IMG_0303.jpg
+2024-01-05,Rio de Janeiro,Ana;Diego,beach,Réveillon,IMG_0401.jpg
+2024-01-05,Rio de Janeiro,Diego,beach;sunset,Réveillon,IMG_0402.jpg
+2024-03-10,Buenos Aires,Ana;Bruno,city;food,Argentina 2024,IMG_0501.jpg
+2024-03-11,Buenos Aires,Ana,city;night,Argentina 2024,IMG_0502.jpg
+2024-03-12,Mendoza,Bruno,mountain;wine,Argentina 2024,IMG_0503.jpg
+2024-08-19,São Paulo,Carla;Diego,city,Trampo,IMG_0601.jpg
+2024-08-19,São Paulo,Carla,night,,IMG_0602.jpg
+2024-12-25,Gramado,Ana;Bruno;Carla;Diego,winter;family,Natal 2024,IMG_0701.jpg
+2024-12-25,Gramado,Ana;Diego,winter;food,Natal 2024,IMG_0702.jpg
+2024-12-26,Gramado,Bruno;Carla,mountain,Natal 2024,IMG_0703.jpg
