@@ -100,6 +100,17 @@ export function RingTrack({ typeId, index, label, svgRef }: RingTrackProps) {
         <text className="ring-type-label" x={labelX} y={-8} textAnchor="end">
           {label}
         </text>
+        <g
+          className="ring-hide-button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => dispatch({ type: 'HIDE_RING', typeId })}
+        >
+          <title>Ocultar órbita</title>
+          <circle className="ring-hide-hit" cx={labelX - 8} cy={14} r={9} />
+          <text className="ring-hide-glyph" x={labelX - 8} y={18} textAnchor="middle">
+            ×
+          </text>
+        </g>
       </g>
     </g>
   );

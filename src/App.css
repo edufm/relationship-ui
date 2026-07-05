@@ -469,6 +469,69 @@
   color: var(--brass-bright);
 }
 
+.ring-hide-button {
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.ring-label-handle:hover .ring-hide-button,
+.ring-hide-button:hover {
+  opacity: 1;
+}
+
+.ring-hide-hit {
+  fill: rgba(12, 15, 22, 0.85);
+  stroke: var(--ring-track);
+  stroke-width: 1;
+}
+
+.ring-hide-glyph {
+  fill: var(--ring-label);
+  font-size: 13px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ring-hide-button:hover .ring-hide-glyph {
+  fill: var(--brass-bright);
+}
+
+.hidden-rings {
+  position: fixed;
+  left: 14px;
+  bottom: 52px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: 60vw;
+}
+
+.hidden-rings-caption {
+  color: var(--ring-label);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hidden-ring-chip {
+  padding: 4px 10px;
+  border: 1px dashed var(--ring-track);
+  border-radius: 12px;
+  background: rgba(12, 15, 22, 0.8);
+  color: var(--planet-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.hidden-ring-chip:hover {
+  color: var(--brass-bright);
+  border-color: var(--brass);
+}
+
 .source-switch {
   position: fixed;
   left: 14px;

@@ -14,6 +14,8 @@ export interface OrbitState {
   interaction: Interaction;
   /** Entity whose detail sidebar is open, if any. Independent of ring selection. */
   inspected: EntityId | null;
+  /** Rings hidden from the visualization, remembering where each one sat so it can return there. */
+  hiddenRings: { typeId: EntityTypeId; index: number }[];
 }
 
 export type OrbitAction =
@@ -24,7 +26,9 @@ export type OrbitAction =
   | { type: 'REORDER_COMMIT'; fromIndex: number; toIndex: number }
   | { type: 'END_INTERACTION' }
   | { type: 'INSPECT'; entityId: EntityId }
-  | { type: 'CLOSE_INSPECT' };
+  | { type: 'CLOSE_INSPECT' }
+  | { type: 'HIDE_RING'; typeId: EntityTypeId }
+  | { type: 'SHOW_RING'; typeId: EntityTypeId };
 
 /** Rotation a ring needs so that `selectedId` (if present among `candidates`) lands exactly on the reference axis (angle 0), using the ring's fixed slot spacing. */
 function computeAlignedRotation(candidates: Entity[], selectedId: EntityId | null, radius: number): number {
@@ -45,7 +49,7 @@ export function createInitialOrbitState(dataset: Dataset, ringOrder: EntityTypeI
     rotation[typeId] = computeAlignedRotation(candidates, selected[typeId], radiusForIndex(i));
   });
 
-  return { ringOrder, rotation, selected, interaction: { kind: 'idle' }, inspected: null };
+  return { ringOrder, rotation, selected, interaction: { kind: 'idle' }, inspected: null, hiddenRings: [] };
 }
 
 /** Recomputes selection + aligned rotation for every ring from `startIndex` outward. Used after a selection change or a ring reorder. */
@@ -135,6 +139,36 @@ export function createOrbitReducer(dataset: Dataset) {
 
       case 'CLOSE_INSPECT':
         return { ...state, inspected: null };
+
+      case 'HIDE_RING': {
+        const index = state.ringOrder.indexOf(action.typeId);
+        if (index === -1 || state.ringOrder.length <= 1) return state;
+        const newRingOrder = state.ringOrder.filter((t) => t !== action.typeId);
+        const { selected, rotation } = cascade(dataset, newRingOrder, state.selected, state.rotation, index);
+        return {
+          ...state,
+          ringOrder: newRingOrder,
+          selected,
+          rotation,
+          hiddenRings: [...state.hiddenRings, { typeId: action.typeId, index }],
+        };
+      }
+
+      case 'SHOW_RING': {
+        const entry = state.hiddenRings.find((h) => h.typeId === action.typeId);
+        if (!entry) return state;
+        const index = Math.min(entry.index, state.ringOrder.length);
+        const newRingOrder = [...state.ringOrder];
+        newRingOrder.splice(index, 0, action.typeId);
+        const { selected, rotation } = cascade(dataset, newRingOrder, state.selected, state.rotation, index);
+        return {
+          ...state,
+          ringOrder: newRingOrder,
+          selected,
+          rotation,
+          hiddenRings: state.hiddenRings.filter((h) => h.typeId !== action.typeId),
+        };
+      }
 
       default:
         return state;
