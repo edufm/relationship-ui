@@ -63,6 +63,42 @@ export function recomputeFrom(
   return next;
 }
 
+/**
+ * When the selection committed at `ringIndex` isn't a child of the currently selected parent —
+ * it came from a borrowed neighbor — walks inward re-selecting each parent (the borrowed
+ * entity's own parent, then that parent's parent, and so on) until the chain is coherent again.
+ * Mutates `selected` in place and returns the innermost ring index whose selection changed
+ * (`ringIndex` itself when no back-propagation was needed).
+ */
+export function backPropagateSelection(
+  dataset: Dataset,
+  ringOrder: EntityTypeId[],
+  selected: SelectionMap,
+  ringIndex: number,
+): number {
+  let startIndex = ringIndex;
+
+  for (let i = ringIndex; i > 0; i--) {
+    const selectedId = selected[ringOrder[i]];
+    if (selectedId == null) break;
+
+    const candidates = candidatesForRing(dataset, ringOrder, selected, i);
+    if (candidates.some((c) => c.id === selectedId)) break;
+
+    // Among the entity's parents, prefer one that is already a valid candidate on the parent
+    // ring, so back-propagation disturbs the inner selections as little as possible.
+    const parents = relatedEntitiesOfType(dataset, ringOrder[i - 1], selectedId);
+    if (parents.length === 0) break;
+    const parentCandidates = candidatesForRing(dataset, ringOrder, selected, i - 1);
+    const preferred = parents.find((p) => parentCandidates.some((c) => c.id === p.id)) ?? parents[0];
+
+    selected[ringOrder[i - 1]] = preferred.id;
+    startIndex = i - 1;
+  }
+
+  return startIndex;
+}
+
 export interface RingDisplayList {
   /** The ring's candidates plus, when there aren't enough to fill the visible window, entities
    * borrowed from the parent ring's neighboring (non-selected) entities — so scrolling past the
@@ -72,6 +108,12 @@ export interface RingDisplayList {
    * rotation) are measured from. NOT the currently-selected entity's index: that would shift
    * with every new selection and break rotation's meaning as a stable, absolute encoding. */
   originOffset: number;
+  /** How many entries of `entities`, starting at `originOffset`, are core candidates (children
+   * of the actually-selected parent) rather than borrowed from neighbors. */
+  coreLength: number;
+  /** For each borrowed entity, the id of the parent-ring neighbor it was borrowed from —
+   * lets the view draw a line back to its true origin. Core entities aren't in the map. */
+  borrowedFrom: Map<EntityId, EntityId>;
 }
 
 /**
@@ -89,9 +131,10 @@ export function buildRingDisplayList(
   const typeId = ringOrder[ringIndex];
   const core = candidatesForRing(dataset, ringOrder, selected, ringIndex);
   const coreAnchor = Math.max(0, core.findIndex((c) => c.id === selected[typeId]));
+  const borrowedFrom = new Map<EntityId, EntityId>();
 
   if (ringIndex === 0 || core.length === 0) {
-    return { entities: core, originOffset: 0 };
+    return { entities: core, originOffset: 0, coreLength: core.length, borrowedFrom };
   }
 
   const aboveDeficit = Math.max(0, halfWindow - coreAnchor);
@@ -101,48 +144,46 @@ export function buildRingDisplayList(
   let belowOverflow: Entity[] = [];
 
   if (aboveDeficit > 0 || belowDeficit > 0) {
-    const parentTypeId = ringOrder[ringIndex - 1];
-    const parentCandidates = candidatesForRing(dataset, ringOrder, selected, ringIndex - 1);
-    const parentN = parentCandidates.length;
+    // Borrow by walking the parent ring's *display list* (which is itself built recursively),
+    // not just its core candidates — so when the parent's visible neighbors are themselves
+    // borrowed, this ring can still keep filling its window from their children.
+    const parentList = buildRingDisplayList(dataset, ringOrder, selected, ringIndex - 1, halfWindow);
+    const parents = parentList.entities;
 
     // Based on the parent's committed selection, not its live (possibly mid-animation) rotation —
     // using rotation here would make the borrowed set flicker between neighbors while the parent
     // ring's own snap animation is still in flight.
-    const parentK = Math.max(0, parentCandidates.findIndex((c) => c.id === selected[parentTypeId]));
+    const parentK = Math.max(0, parents.findIndex((p) => p.id === selected[ringOrder[ringIndex - 1]]));
 
-    // Walk outward toward the parent's own list boundaries — never wrapping around — so "above"/
-    // "below" here always matches what the parent ring itself shows above/below its selection
-    // (the parent ring's own display doesn't wrap either; see buildRingDisplayList/RingGroup).
-    if (aboveDeficit > 0) {
+    // An entity can relate to more than one parent; never list it twice on the same ring.
+    const seen = new Set(core.map((c) => c.id));
+
+    // Walk outward toward the parent list's boundaries — never wrapping around — so "above"/
+    // "below" here always matches what the parent ring itself shows above/below its selection.
+    const collect = (direction: -1 | 1, deficit: number): Entity[] => {
       const chunks: Entity[][] = [];
       let count = 0;
-      let i = parentK - 1;
-      while (count < aboveDeficit && i >= 0) {
-        const chunk = relatedEntitiesOfType(dataset, typeId, parentCandidates[i].id);
+      for (let i = parentK + direction; count < deficit && i >= 0 && i < parents.length; i += direction) {
+        const chunk = relatedEntitiesOfType(dataset, typeId, parents[i].id).filter((e) => !seen.has(e.id));
+        for (const entity of chunk) {
+          seen.add(entity.id);
+          borrowedFrom.set(entity.id, parents[i].id);
+        }
         chunks.push(chunk);
         count += chunk.length;
-        i -= 1;
       }
-      // Nearest neighbor (parentK-1) contributes last, so its children end up adjacent to core.
-      aboveOverflow = chunks.slice().reverse().flat();
-    }
+      // Above: nearest neighbor (parentK-1) contributes last, so its children end up adjacent to core.
+      return direction === -1 ? chunks.reverse().flat() : chunks.flat();
+    };
 
-    if (belowDeficit > 0) {
-      const chunks: Entity[][] = [];
-      let count = 0;
-      let i = parentK + 1;
-      while (count < belowDeficit && i < parentN) {
-        const chunk = relatedEntitiesOfType(dataset, typeId, parentCandidates[i].id);
-        chunks.push(chunk);
-        count += chunk.length;
-        i += 1;
-      }
-      belowOverflow = chunks.flat();
-    }
+    if (aboveDeficit > 0) aboveOverflow = collect(-1, aboveDeficit);
+    if (belowDeficit > 0) belowOverflow = collect(1, belowDeficit);
   }
 
   return {
     entities: [...aboveOverflow, ...core, ...belowOverflow],
     originOffset: aboveOverflow.length,
+    coreLength: core.length,
+    borrowedFrom,
   };
 }

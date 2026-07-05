@@ -4,6 +4,7 @@ import { radiusForIndex } from '../geometry/ring';
 import { ReferenceAxis } from './ReferenceAxis';
 import { RingTrack } from './RingTrack';
 import { RingGroup } from './RingGroup';
+import { Sun } from './Sun';
 
 const LEFT_MARGIN = 140;
 const CLIP_ID = 'orbit-viewport-clip';
@@ -52,26 +53,20 @@ export function OrbitExplorer() {
 
       <g clipPath={`url(#${CLIP_ID})`}>
         <ReferenceAxis ringRadii={state.ringOrder.map((_, i) => radiusForIndex(i))} maxRadius={width - LEFT_MARGIN} />
+        <Sun name={dataset.name} />
         {state.ringOrder.map((typeId, index) => {
           const entityType = dataset.entityTypes.find((t) => t.id === typeId);
+          const label = entityType?.label ?? typeId;
           return (
             <g key={typeId} className="ring" data-type-id={typeId}>
-              <RingTrack typeId={typeId} index={index} svgRef={svgRef} />
+              <RingTrack typeId={typeId} index={index} label={label} svgRef={svgRef} />
               <RingGroup
                 typeId={typeId}
                 index={index}
-                label={entityType?.label ?? typeId}
+                label={label}
                 viewportHalfHeight={halfHeight}
                 svgRef={svgRef}
               />
-              <text
-                className="ring-type-label"
-                x={radiusForIndex(index)}
-                y={-halfHeight + 28}
-                textAnchor="middle"
-              >
-                {entityType?.label ?? typeId}
-              </text>
             </g>
           );
         })}

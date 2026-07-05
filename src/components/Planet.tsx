@@ -39,6 +39,7 @@ export function Planet({ entity, x, y, opacity, isSelected }: PlanetProps) {
       transform={`translate(${x} ${y})`}
       opacity={opacity}
       className={`planet${isSelected ? ' planet-selected' : ''}`}
+      data-entity-id={entity.id}
     >
       <circle className="planet-circle" r={PLANET_RADIUS} />
       <text className="planet-label" textAnchor="middle">

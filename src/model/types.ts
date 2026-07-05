@@ -10,6 +10,8 @@ export interface Entity {
   id: EntityId;
   typeId: EntityTypeId;
   label: string;
+  /** Extra key→value facts shown in the detail sidebar; not used for navigation. */
+  properties?: Record<string, string | number>;
 }
 
 export interface Relation {
@@ -18,6 +20,8 @@ export interface Relation {
 }
 
 export interface Dataset {
+  /** Display name of the dataset — rendered as the central "sun". */
+  name: string;
   entityTypes: EntityType[];
   entities: Entity[];
   relations: Relation[];

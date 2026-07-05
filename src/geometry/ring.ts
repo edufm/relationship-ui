@@ -1,7 +1,9 @@
-export const BASE_RADIUS = 60;
-export const RING_GAP = 130;
+/** Radius of the central "sun" (the dataset itself — it has no orbit of its own). */
+export const SUN_RADIUS = 84;
+export const BASE_RADIUS = 260;
+export const RING_GAP = 190;
 /** Desired arc-length (px) between adjacent items on any ring, regardless of its radius or candidate count. Keeping this fixed (instead of spreading N items evenly around a full circle) is what keeps sparse rings from looking empty and dense rings from looking crowded. */
-export const ARC_SPACING = 90;
+export const ARC_SPACING = 120;
 
 export function radiusForIndex(index: number): number {
   return BASE_RADIUS + index * RING_GAP;

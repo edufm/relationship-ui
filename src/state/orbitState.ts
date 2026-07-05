@@ -1,5 +1,5 @@
 import type { Dataset, Entity, EntityId, EntityTypeId } from '../model/types';
-import { candidatesForRing, recomputeFrom, type SelectionMap } from '../model/selectors';
+import { backPropagateSelection, candidatesForRing, recomputeFrom, type SelectionMap } from '../model/selectors';
 import { angleStepForRadius, radiusForIndex } from '../geometry/ring';
 
 export type Interaction =
@@ -12,6 +12,8 @@ export interface OrbitState {
   rotation: Record<EntityTypeId, number>;
   selected: SelectionMap;
   interaction: Interaction;
+  /** Entity whose detail sidebar is open, if any. Independent of ring selection. */
+  inspected: EntityId | null;
 }
 
 export type OrbitAction =
@@ -20,7 +22,9 @@ export type OrbitAction =
   | { type: 'ROTATE_COMMIT'; typeId: EntityTypeId; selectedId: EntityId | null; angle: number }
   | { type: 'BEGIN_REORDER'; typeId: EntityTypeId; pointerRadius: number }
   | { type: 'REORDER_COMMIT'; fromIndex: number; toIndex: number }
-  | { type: 'END_INTERACTION' };
+  | { type: 'END_INTERACTION' }
+  | { type: 'INSPECT'; entityId: EntityId }
+  | { type: 'CLOSE_INSPECT' };
 
 /** Rotation a ring needs so that `selectedId` (if present among `candidates`) lands exactly on the reference axis (angle 0), using the ring's fixed slot spacing. */
 function computeAlignedRotation(candidates: Entity[], selectedId: EntityId | null, radius: number): number {
@@ -41,7 +45,7 @@ export function createInitialOrbitState(dataset: Dataset, ringOrder: EntityTypeI
     rotation[typeId] = computeAlignedRotation(candidates, selected[typeId], radiusForIndex(i));
   });
 
-  return { ringOrder, rotation, selected, interaction: { kind: 'idle' } };
+  return { ringOrder, rotation, selected, interaction: { kind: 'idle' }, inspected: null };
 }
 
 /** Recomputes selection + aligned rotation for every ring from `startIndex` outward. Used after a selection change or a ring reorder. */
@@ -89,12 +93,16 @@ export function createOrbitReducer(dataset: Dataset) {
         const index = state.ringOrder.indexOf(action.typeId);
         const committedSelected: SelectionMap = { ...state.selected, [action.typeId]: action.selectedId };
         const committedRotation = { ...state.rotation, [action.typeId]: action.angle };
+        // If the committed entity was borrowed from a neighbor, re-select its real ancestors on
+        // the inner rings first; then the cascade must restart from the innermost changed ring
+        // (realigning this ring too), instead of only from the rings outside it.
+        const innermostChanged = backPropagateSelection(dataset, state.ringOrder, committedSelected, index);
         const { selected, rotation } = cascade(
           dataset,
           state.ringOrder,
           committedSelected,
           committedRotation,
-          index + 1,
+          innermostChanged === index ? index + 1 : innermostChanged,
         );
         return { ...state, selected, rotation, interaction: { kind: 'idle' } };
       }
@@ -118,6 +126,12 @@ export function createOrbitReducer(dataset: Dataset) {
 
       case 'END_INTERACTION':
         return { ...state, interaction: { kind: 'idle' } };
+
+      case 'INSPECT':
+        return { ...state, inspected: action.entityId };
+
+      case 'CLOSE_INSPECT':
+        return { ...state, inspected: null };
 
       default:
         return state;
