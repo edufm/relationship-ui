@@ -27,9 +27,11 @@ interface PlanetProps {
   y: number;
   opacity: number;
   isSelected: boolean;
+  /** Synthetic "sem {tipo}" marker for a chain without a candidate — dashed, non-inspectable. */
+  isPlaceholder?: boolean;
 }
 
-export function Planet({ entity, x, y, opacity, isSelected }: PlanetProps) {
+export function Planet({ entity, x, y, opacity, isSelected, isPlaceholder = false }: PlanetProps) {
   const lines = wrapLabel(entity.label);
   const lineHeight = 1.05;
   const startDy = -((lines.length - 1) * lineHeight) / 2;
@@ -38,7 +40,7 @@ export function Planet({ entity, x, y, opacity, isSelected }: PlanetProps) {
     <g
       transform={`translate(${x} ${y})`}
       opacity={opacity}
-      className={`planet${isSelected ? ' planet-selected' : ''}`}
+      className={`planet${isSelected ? ' planet-selected' : ''}${isPlaceholder ? ' planet-placeholder' : ''}`}
       data-entity-id={entity.id}
     >
       <circle className="planet-circle" r={PLANET_RADIUS} />

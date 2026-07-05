@@ -136,11 +136,13 @@ export function recomputeFrom(
 }
 
 /**
- * When the selection committed at `ringIndex` isn't a child of the currently selected parent —
- * it came from a borrowed neighbor — walks inward re-selecting each parent (the borrowed
- * entity's own parent, then that parent's parent, and so on) until the chain is coherent again.
+ * When the selection committed at `ringIndex` isn't a valid candidate for the current chain —
+ * it came from a borrowed neighbor, or an inner selection conflicts with it under cumulative
+ * filtering — rebuilds the inner chain anchored on the committed entity: every inner ring whose
+ * type relates to the committed one re-selects a candidate compatible with it (kept unchanged
+ * when already compatible), inner-to-outer so each step sees the reconciled rings before it.
  * Mutates `selected` in place and returns the innermost ring index whose selection changed
- * (`ringIndex` itself when no back-propagation was needed).
+ * (`ringIndex` itself when nothing needed to change).
  */
 export function backPropagateSelection(
   dataset: Dataset,
@@ -148,27 +150,42 @@ export function backPropagateSelection(
   selected: SelectionMap,
   ringIndex: number,
 ): number {
-  let startIndex = ringIndex;
-
-  for (let i = ringIndex; i > 0; i--) {
-    const selectedId = selected[ringOrder[i]];
-    if (selectedId == null) break;
-
-    const candidates = candidatesForRing(dataset, ringOrder, selected, i);
-    if (candidates.some((c) => c.id === selectedId)) break;
-
-    // Among the entity's parents, prefer one that is already a valid candidate on the parent
-    // ring, so back-propagation disturbs the inner selections as little as possible.
-    const parents = relatedEntitiesOfType(dataset, ringOrder[i - 1], selectedId);
-    if (parents.length === 0) break;
-    const parentCandidates = candidatesForRing(dataset, ringOrder, selected, i - 1);
-    const preferred = parents.find((p) => parentCandidates.some((c) => c.id === p.id)) ?? parents[0];
-
-    selected[ringOrder[i - 1]] = preferred.id;
-    startIndex = i - 1;
+  const committedId = selected[ringOrder[ringIndex]];
+  if (committedId == null) return ringIndex;
+  if (candidatesForRing(dataset, ringOrder, selected, ringIndex).some((c) => c.id === committedId)) {
+    return ringIndex;
   }
 
-  return startIndex;
+  const { neighborsByEntity, relatedTypePairs } = getDatasetIndex(dataset);
+  const committedNeighbors = neighborsByEntity.get(committedId) ?? new Set<EntityId>();
+  const committedType = ringOrder[ringIndex];
+  let innermostChanged = ringIndex;
+
+  for (let i = 0; i < ringIndex; i++) {
+    const typeId = ringOrder[i];
+    const candidates = candidatesForRing(dataset, ringOrder, selected, i);
+    const compatible = relatedTypePairs.has(typePairKey(typeId, committedType))
+      ? candidates.filter((c) => committedNeighbors.has(c.id))
+      : candidates;
+    // A ring with candidates but none compatible keeps its normal pool: better an incoherent
+    // link (which the cascade will surface) than blanking a ring the entity says nothing about.
+    const pool = compatible.length > 0 ? compatible : candidates;
+
+    const currentId = selected[typeId];
+    if (currentId != null && pool.some((c) => c.id === currentId)) continue;
+    selected[typeId] = pool.length > 0 ? pool[0].id : null;
+    innermostChanged = Math.min(innermostChanged, i);
+  }
+
+  return innermostChanged;
+}
+
+/** Id prefix of the synthetic "sem {tipo}" planet shown when a ring has no candidate for the
+ * current chain. Display-only: it is never a valid selection and never reaches the sidebar. */
+export const PLACEHOLDER_PREFIX = '__none__:';
+
+export function isPlaceholderId(id: EntityId): boolean {
+  return id.startsWith(PLACEHOLDER_PREFIX);
 }
 
 export interface RingDisplayList {
@@ -201,15 +218,27 @@ export function buildRingDisplayList(
   halfWindow: number,
 ): RingDisplayList {
   const typeId = ringOrder[ringIndex];
-  const core = candidatesForRing(dataset, ringOrder, selected, ringIndex);
-  const coreAnchor = Math.max(0, core.findIndex((c) => c.id === selected[typeId]));
+  const candidates = candidatesForRing(dataset, ringOrder, selected, ringIndex);
   const borrowedFrom = new Map<EntityId, EntityId>();
 
-  // An empty core is NOT an early exit: when the selected parent (or skip-anchor) has no
-  // children of this type, the ring can still fill entirely with borrowed neighbors.
   if (ringIndex === 0) {
-    return { entities: core, originOffset: 0, coreLength: core.length, borrowedFrom };
+    return { entities: candidates, originOffset: 0, coreLength: candidates.length, borrowedFrom };
   }
+
+  // No candidate for the current chain → a synthetic "sem {tipo}" placeholder holds the axis
+  // slot, so borrowed neighbors settle around it instead of one of them sitting ambiguously on
+  // the axis as if it belonged to the chain.
+  const core: Entity[] =
+    candidates.length > 0
+      ? candidates
+      : [
+          {
+            id: PLACEHOLDER_PREFIX + typeId,
+            typeId,
+            label: `sem ${(dataset.entityTypes.find((t) => t.id === typeId)?.label ?? typeId).toLowerCase()}`,
+          },
+        ];
+  const coreAnchor = Math.max(0, core.findIndex((c) => c.id === selected[typeId]));
 
   const aboveDeficit = Math.max(0, halfWindow - coreAnchor);
   const belowDeficit = Math.max(0, halfWindow - (core.length - 1 - coreAnchor));

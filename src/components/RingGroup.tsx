@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import { useOrbit } from '../state/OrbitContext';
-import { buildRingDisplayList } from '../model/selectors';
+import { buildRingDisplayList, isPlaceholderId } from '../model/selectors';
 import { angleStepForRadius, angularDistance, polarToCartesian, radiusForIndex, SUN_RADIUS } from '../geometry/ring';
 import { clientToLocalPoint } from '../geometry/pointer';
 import { animateValue, type TweenHandle } from '../geometry/tween';
@@ -174,7 +174,9 @@ export function RingGroup({ typeId, index, label, viewportHalfHeight, svgRef }: 
         dispatch({ type: 'ROTATE_LIVE', typeId, angle: value });
       },
       () => {
-        dispatch({ type: 'ROTATE_COMMIT', typeId, selectedId: selectedEntity.id, angle: targetRotation });
+        // Snapping onto the "sem {tipo}" placeholder commits an empty selection, not the marker.
+        const selectedId = isPlaceholderId(selectedEntity.id) ? null : selectedEntity.id;
+        dispatch({ type: 'ROTATE_COMMIT', typeId, selectedId, angle: targetRotation });
       },
     );
   }
@@ -223,7 +225,7 @@ export function RingGroup({ typeId, index, label, viewportHalfHeight, svgRef }: 
     const currentRotation = liveRotationRef.current;
     const targetAbsoluteSlot = Math.round(-currentRotation / angleStep);
     snapTo(currentRotation, originOffset + targetAbsoluteSlot);
-    if (press && !press.moved && press.entityId) {
+    if (press && !press.moved && press.entityId && !isPlaceholderId(press.entityId)) {
       dispatch({ type: 'INSPECT', entityId: press.entityId });
     }
   }
@@ -260,6 +262,9 @@ export function RingGroup({ typeId, index, label, viewportHalfHeight, svgRef }: 
 
   function lineAnchor(entityId: string, isCore: boolean): { x: number; y: number; gap: number } | null {
     if (index === 0) return { x: 0, y: 0, gap: SUN_RADIUS };
+    // A selection-less parent ring shows its "sem {tipo}" placeholder on the axis — chain lines
+    // pass through it so the sequence stays visually continuous.
+    if (isCore && parentSelectedId == null) return { x: radiusForIndex(index - 1), y: 0, gap: PLANET_RADIUS };
     const anchorId = isCore ? parentSelectedId : borrowedFrom.get(entityId);
     const position = anchorId != null ? parentPositions?.get(anchorId) : null;
     return position ? { ...position, gap: PLANET_RADIUS } : null;
@@ -299,7 +304,15 @@ export function RingGroup({ typeId, index, label, viewportHalfHeight, svgRef }: 
         );
       })}
       {visiblePlanets.map(({ entity, x, y, opacity }) => (
-        <Planet key={entity.id} entity={entity} x={x} y={y} opacity={opacity} isSelected={entity.id === selectedId} />
+        <Planet
+          key={entity.id}
+          entity={entity}
+          x={x}
+          y={y}
+          opacity={opacity}
+          isSelected={entity.id === selectedId}
+          isPlaceholder={isPlaceholderId(entity.id)}
+        />
       ))}
     </g>
   );

@@ -104,6 +104,17 @@
   transition: fill 150ms ease;
 }
 
+.planet-placeholder .planet-circle {
+  fill: none;
+  stroke: var(--ring-track);
+  stroke-dasharray: 4 5;
+}
+
+.planet-placeholder .planet-label {
+  fill: var(--ring-label);
+  font-style: italic;
+}
+
 .planet-selected .planet-circle {
   fill: var(--brass);
   stroke: var(--brass-bright);
