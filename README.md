@@ -41,6 +41,11 @@ O loader é `src/data/columnar.ts` (CSVs grandes são amostrados uniformemente, 
   ```bash
   docker exec -i immich-postgres psql -U immich -d immich -f - < scripts/immich-photos.sql > fotos.csv
   ```
+- **Exportar do Immich com labels de IA** (`scripts/immich-ai-labels.mjs`): o Immich moderno não guarda labels de classificação (só embeddings CLIP em `smart_search`), então este script gera os labels na hora — pega o embedding de texto de cada conceito de um vocabulário (~35 conceitos visuais, editável no script) no container `immich-machine-learning` e classifica as fotos por similaridade de cosseno direto no banco (pgvecto-rs), emitindo o CSV padrão com a coluna `labels` no lugar das tags:
+  ```bash
+  node scripts/immich-ai-labels.mjs "postgres://immich:senha@IP-do-pg:5432/immich" "http://IP-do-ml:3003" > fotos.csv
+  ```
+  Terceiro argumento opcional ajusta o limiar de similaridade (default 0.24; suba pra menos rótulos e mais precisão).
 - **Conversor Postgres embutido**: informe a connection string, marque as tabelas de interesse e o servidor (`server/pgApi.ts`, middleware do Vite) lê o ERD (foreign keys) e **emite o CSV padrão** — a tabela mais externa da cadeia FK vira o objeto (uma linha por linha dela) e cada outra tabela vira uma coluna com os rótulos das linhas relacionadas, seguindo caminhos de FK inclusive através de tabelas intermediárias e junções colapsadas (`;` quando várias, vazio quando nenhuma). Botão **"Baixar CSV"** entrega o mesmo arquivo pra reuso. Segurança: conexão somente leitura, identificadores escapados, colunas sensíveis (senha/token/segredo) e tipos não-escalares nunca saem do servidor. Relações que não passam pelo objeto (ex.: `album→user` quando o objeto é `asset`) se achatam pela linha do objeto.
 
 ## O que já foi construído
