@@ -13,16 +13,35 @@ npm install
 npm run dev
 ```
 
-## Fontes de dados
+## O formato de entrada (o contrato da UI)
 
-A tela inicial oferece três fontes:
+A UI aceita **um único formato**, colunar e objeto-cêntrico — cada coluna é uma órbita, cada linha um objeto; o objeto é encontrado quando todos os planetas alinham. Codificação v1: **CSV** (RFC-4180, UTF-8, com cabeçalho). Parquet está planejado como codificação v2 do mesmo schema lógico (LIST nativo pra multi-valores).
 
-- **Dataset de exemplo** (`src/data/monuments.json`): Continente → País → Cidade → Monumento, recriando o rascunho original. Entidades podem ter `properties` (chave→valor) exibidas na barra lateral.
-- **CSV de fotos** (ex.: exportado do Immich): uma linha por foto com colunas `data, local, pessoas, tags, albuns, arquivo` (multivalores separados por `;`). O loader (`src/data/photoCsv.ts`) agrega em órbitas **Ano → Mês → Dia → Localização → Pessoa → Tag → Álbum → Foto**, com relações por coocorrência (todo atributo de uma foto se relaciona com os demais), então os anéis podem ser arrastados pra **qualquer** ordem — ex.: Pessoa → Ano mostra em que anos aquela pessoa aparece. Cada entidade agregada traz a contagem de fotos nas `properties`. CSVs grandes são amostrados uniformemente (~4.000 fotos) pra cobrir todos os anos. Query pronta pro Immich em `scripts/immich-photos.sql`:
+- **Uma linha por objeto.** O cabeçalho nomeia as órbitas; a **ordem das colunas é a ordem inicial dos anéis** (interno → externo). O objeto é sempre o anel mais externo.
+- **Colunas prefixadas com `_` são metadados do objeto**, não órbitas: a **primeira** `_coluna` dá o nome do anel de objetos e o rótulo de cada objeto (ex.: `_foto`, `_livro`); as demais aparecem como informações na barra lateral (ex.: `_páginas`, `_nota`).
+- **Célula vazia = sem relação**, explícito — vira o placeholder "sem {órbita}". **`;` separa multi-valores** na mesma célula (uma foto `sunset;beach` é uma linha só; nunca duplique linhas).
+- **Açúcar de data**: uma coluna `data`/`date` com valores ISO (`AAAA-MM-DD…`) expande automaticamente em órbitas Ano → Mês → Dia.
+- **Ordem dos valores numa órbita = primeira aparição no arquivo** — conversores devem emitir linhas ordenadas pela hierarquia dominante (ex.: `ORDER BY` data).
+- As relações são por coocorrência (todo atributo da linha se relaciona com os demais e com o objeto), o que permite reordenar/ocultar anéis livremente; entidades agregadas mostram a contagem de objetos na barra lateral.
+
+Exemplo mínimo:
+
+```csv
+data,gênero,autores,_livro,_páginas
+2001-04-10,Fantasia,Tolkien;Christopher Tolkien,Silmarillion Anotado,400
+2005-08-02,,Asimov,Fundação,320
+```
+
+O loader é `src/data/columnar.ts` (CSVs grandes são amostrados uniformemente, ~4.000 objetos; cabeçalho legado `arquivo` é aceito como `_foto`).
+
+## Fontes na tela inicial (todas viram o formato acima)
+
+- **Carregar CSV** ou usar as amostras embutidas: `src/data/sample-monuments.csv` (Continente → País → Cidade → Monumento) e `src/data/sample-photos.csv`.
+- **Exportar do Immich**: query pronta em `scripts/immich-photos.sql`:
   ```bash
   docker exec -i immich-postgres psql -U immich -d immich -f - < scripts/immich-photos.sql > fotos.csv
   ```
-- **Postgres ao vivo**: informe a connection string, marque as tabelas de interesse e o app lê o ERD (foreign keys) pra montar o dataset — tabela=tipo/órbita, linha=planeta, FK=relação, colunas=`properties`. O backend é um middleware do próprio Vite (`server/pgApi.ts`, endpoints `/api/pg/*`): conexão **somente leitura** (`default_transaction_read_only`), identificadores escapados, colunas sensíveis (senha/token/segredo) nunca saem do servidor, tipos não-escalares (bytea, vector) são ignorados. Tabelas de junção não selecionadas (ex.: `album_asset`) são colapsadas em relações diretas; a busca de linhas caminha o grafo FK a partir da tabela mais interna (BFS, ~250 linhas/tabela) pra trazer um subgrafo conexo em vez de fatias soltas; e a ordem inicial dos anéis é uma cadeia que mantém anéis vizinhos conectados por FK (hubs no meio).
+- **Conversor Postgres embutido**: informe a connection string, marque as tabelas de interesse e o servidor (`server/pgApi.ts`, middleware do Vite) lê o ERD (foreign keys) e **emite o CSV padrão** — a tabela mais externa da cadeia FK vira o objeto (uma linha por linha dela) e cada outra tabela vira uma coluna com os rótulos das linhas relacionadas, seguindo caminhos de FK inclusive através de tabelas intermediárias e junções colapsadas (`;` quando várias, vazio quando nenhuma). Botão **"Baixar CSV"** entrega o mesmo arquivo pra reuso. Segurança: conexão somente leitura, identificadores escapados, colunas sensíveis (senha/token/segredo) e tipos não-escalares nunca saem do servidor. Relações que não passam pelo objeto (ex.: `album→user` quando o objeto é `asset`) se achatam pela linha do objeto.
 
 ## O que já foi construído
 

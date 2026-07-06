@@ -1,5 +1,6 @@
--- Exporta um CSV de fotos do Immich no formato que o Orbit Explorer lê no modo "CSV de fotos":
---   data, local, pessoas, tags, albuns, arquivo   (multivalores separados por ";")
+-- Exporta um CSV de fotos do Immich no formato colunar padrão do Orbit Explorer:
+--   data, local, pessoas, tags, albuns, _foto   (multivalores separados por ";";
+--   "_foto" é a coluna de metadado que nomeia o anel de objetos e dá o rótulo de cada foto)
 --
 -- Uso (ajuste usuário/banco/container se necessário):
 --   docker exec -i immich-postgres psql -U immich -d immich -f - < scripts/immich-photos.sql > fotos.csv
@@ -30,7 +31,7 @@ COPY (
          JOIN album al ON al.id = aa."albumId"
         WHERE aa."assetId" = a.id),
       '') AS albuns,
-    a."originalFileName" AS arquivo
+    a."originalFileName" AS "_foto"
   FROM asset a
   LEFT JOIN asset_exif e ON e."assetId" = a.id
   WHERE a."deletedAt" IS NULL AND a.type = 'IMAGE'

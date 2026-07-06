@@ -1,0 +1,41 @@
+continente,país,cidade,_monumento,_ano,_tipo
+América do Norte,Estados Unidos,Nova York,Estátua da Liberdade,1886,Estátua
+América do Norte,Estados Unidos,Nova York,Empire State Building,1931,Arranha-céu
+América do Norte,Estados Unidos,Washington,Casa Branca,1800,Residência oficial
+América do Norte,Estados Unidos,Washington,Lincoln Memorial,1922,Memorial
+América do Norte,Estados Unidos,São Francisco,Golden Gate,1937,Ponte
+América do Norte,México,Cidade do México,Templo Mayor,séc. XIV,Sítio arqueológico
+América do Norte,México,Cidade do México,Palácio de Belas Artes,1934,Teatro e museu
+América do Norte,México,Cancún,Chichén Itzá,séc. IX,Sítio arqueológico
+América do Norte,Canadá,Toronto,CN Tower,1976,Torre
+América do Norte,Canadá,Ottawa,Parliament Hill,1876,Edifício governamental
+América do Sul,Argentina,Buenos Aires,Obelisco,1936,Monumento
+América do Sul,Argentina,Buenos Aires,Casa Rosada,1898,Palácio de governo
+América do Sul,Argentina,Buenos Aires,La Bombonera,1940,Estádio
+América do Sul,Argentina,Mendoza,Cerro de la Gloria,1914,Monumento
+América do Sul,Brasil,São Paulo,Masp,1968,Museu
+América do Sul,Brasil,São Paulo,Oca,1951,Pavilhão
+América do Sul,Brasil,São Paulo,Ponte Estaiada,2008,Ponte
+América do Sul,Brasil,Rio de Janeiro,Cristo Redentor,1931,Estátua
+América do Sul,Brasil,Rio de Janeiro,Pão de Açúcar,1912,Mirante
+América do Sul,Brasil,Rio de Janeiro,Maracanã,1950,Estádio
+América do Sul,Brasil,Brasília,Congresso Nacional,1960,Edifício governamental
+América do Sul,Brasil,Brasília,Catedral de Brasília,1970,Catedral
+América do Sul,Peru,Cusco,Machu Picchu,séc. XV,Cidadela inca
+América do Sul,Peru,Lima,Plaza Mayor,1535,Praça
+América do Sul,Chile,Santiago,Cerro San Cristóbal,1908,Mirante
+Ásia,Japão,Tóquio,Templo Senso-ji,645,Templo
+Ásia,Japão,Tóquio,Torre de Tóquio,1958,Torre
+Ásia,Japão,Quioto,Kinkaku-ji,1397,Templo
+Ásia,China,Pequim,Grande Muralha,séc. VII a.C.,Fortificação
+Ásia,China,Pequim,Cidade Proibida,1420,Palácio
+Ásia,China,Xangai,Oriental Pearl Tower,1994,Torre
+Ásia,Índia,Nova Deli,Portão da Índia,1931,Monumento
+Ásia,Índia,Agra,Taj Mahal,1653,Mausoléu
+Europa,França,Paris,Torre Eiffel,1889,Torre
+Europa,França,Paris,Museu do Louvre,1793,Museu
+Europa,França,Paris,Arco do Triunfo,1836,Monumento
+Europa,Itália,Roma,Coliseu,ano 80,Anfiteatro
+Europa,Itália,Roma,Fontana di Trevi,1762,Fonte
+Europa,Reino Unido,Londres,Big Ben,1859,Torre do relógio
+Europa,Reino Unido,Londres,Torre de Londres,1078,Castelo

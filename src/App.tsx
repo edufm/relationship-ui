@@ -1,12 +1,9 @@
 import { useState } from 'react';
-import { dataset as sampleDataset } from './data/loadDataset';
 import { OrbitProvider, useOrbit } from './state/OrbitContext';
 import { OrbitExplorer } from './components/OrbitExplorer';
 import { EntitySidebar } from './components/EntitySidebar';
 import { DataSourceSetup, type DataSource } from './components/DataSourceSetup';
 import './App.css';
-
-const SAMPLE_RING_ORDER = ['continent', 'country', 'city', 'landmark'];
 
 /** Chips to restore rings hidden via the × on their axis label. */
 function HiddenRingChips() {
@@ -33,7 +30,7 @@ function App() {
   const [source, setSource] = useState<DataSource | null>(null);
 
   if (!source) {
-    return <DataSourceSetup sample={{ dataset: sampleDataset, ringOrder: SAMPLE_RING_ORDER }} onLoaded={setSource} />;
+    return <DataSourceSetup onLoaded={setSource} />;
   }
 
   return (

@@ -47,9 +47,9 @@ const LABEL_CANDIDATES = [
   'originalfilename',
   'original_file_name',
   'filename',
-  'description',
-  'slug',
 ];
+/** Only when nothing name-ish exists — often empty or long. */
+const WEAK_LABEL_CANDIDATES = ['description', 'slug'];
 
 interface ColumnInfo {
   name: string;
@@ -302,14 +302,6 @@ function sanitizeValue(value: unknown): string | number | null {
   return text.length > MAX_TEXT_LENGTH ? `${text.slice(0, MAX_TEXT_LENGTH)}…` : text;
 }
 
-function prettyLabel(name: string): string {
-  const words = name
-    .replace(/[_-]+/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 interface TablePlan {
   key: string;
   schema: string;
@@ -337,6 +329,8 @@ function planTable(key: string, allColumns: ColumnInfo[], pkColumns: string[], e
   const textish = (c: ColumnInfo) => TEXT_TYPES.has(c.dataType);
   const labelColumn =
     columns.find((c) => textish(c) && LABEL_CANDIDATES.includes(c.name.toLowerCase()))?.name ??
+    columns.find((c) => textish(c) && /name|title|label/i.test(c.name))?.name ??
+    columns.find((c) => textish(c) && WEAK_LABEL_CANDIDATES.includes(c.name.toLowerCase()))?.name ??
     columns.find((c) => textish(c) && !pkColumns.includes(c.name) && !fkColumns.has(c.name))?.name ??
     null;
 
@@ -450,7 +444,18 @@ async function fetchJoinPairs(client: pg.Client, edge: JoinEdge, aValues: string
   return pairs;
 }
 
-async function buildDataset(client: pg.Client, selectedKeys: string[], rootLimit: number) {
+function csvField(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/**
+ * Builds the Orbit columnar CSV (the app's single input format) from the selected tables:
+ * one row per row of the OUTERMOST table of the FK chain (the "object"); every other selected
+ * table becomes an orbit column whose cell holds the labels of the rows related to the object —
+ * following FK paths across intermediate tables, `;`-joined when there are many, empty when
+ * none. The object's own scalar columns become `_`-prefixed metadata columns.
+ */
+async function buildColumnarCsv(client: pg.Client, selectedKeys: string[], rootLimit: number) {
   const fks = await listForeignKeys(client);
   const pks = await listPrimaryKeys(client);
   const selected = new Set(selectedKeys);
@@ -537,38 +542,27 @@ async function buildDataset(client: pg.Client, selectedKeys: string[], rootLimit
     }
   }
 
-  // Assemble the Dataset.
-  const entityTypes = order.map((key) => ({ id: key, label: prettyLabel(key.split('.')[1]) }));
-  const entities: { id: string; typeId: string; label: string; properties?: Record<string, string | number> }[] = [];
-  const entityIds = new Set<string>();
-
-  for (const key of order) {
-    const table = tableRows.get(key)!;
-    for (const [pk, row] of table.rows) {
-      const id = `${key}:${pk}`;
-      const rawLabel = table.plan.labelColumn ? sanitizeValue(row[table.plan.labelColumn]) : null;
-      const label = rawLabel != null && String(rawLabel).trim() !== '' ? String(rawLabel) : `${key.split('.')[1]} ${pk.slice(0, 8)}`;
-      const properties: Record<string, string | number> = {};
-      for (const col of table.plan.propertyColumns) {
-        const v = sanitizeValue(row[col]);
-        if (v != null) properties[col] = v;
-      }
-      entities.push({ id, typeId: key, label, ...(Object.keys(properties).length > 0 ? { properties } : {}) });
-      entityIds.add(id);
-    }
-  }
-
-  const relations: { fromId: string; toId: string }[] = [];
-  const seenRelations = new Set<string>();
-  const pushRelation = (fromId: string, toId: string) => {
-    const relKey = `${fromId}→${toId}`;
-    if (entityIds.has(fromId) && entityIds.has(toId) && !seenRelations.has(relKey)) {
-      seenRelations.add(relKey);
-      relations.push({ fromId, toId });
+  // Row-level hop maps between adjacent tables (both directions), used to walk FK paths from
+  // each object row to every orbit table — including across intermediate tables.
+  const hops = new Map<string, Map<string, Set<string>>>();
+  const addHop = (fromKey: string, fromPk: string, toKey: string, toPk: string) => {
+    for (const [k, a, b] of [
+      [`${fromKey}>${toKey}`, fromPk, toPk],
+      [`${toKey}>${fromKey}`, toPk, fromPk],
+    ] as const) {
+      const map = hops.get(k) ?? new Map<string, Set<string>>();
+      if (!hops.has(k)) hops.set(k, map);
+      const set = map.get(a) ?? new Set<string>();
+      if (!map.has(a)) map.set(a, set);
+      set.add(b);
     }
   };
 
+  const tableNeighbors = new Map<string, Set<string>>(usableKeys.map((k) => [k, new Set<string>()]));
   for (const edge of usableEdges) {
+    const [ka, kb] = edge.kind === 'direct' ? [edge.childKey, edge.parentKey] : [edge.aKey, edge.bKey];
+    tableNeighbors.get(ka)?.add(kb);
+    tableNeighbors.get(kb)?.add(ka);
     if (edge.kind === 'direct') {
       const child = tableRows.get(edge.childKey)!;
       const parentIndex = tableRows.get(edge.parentKey)!.indexBy(edge.refColumn);
@@ -576,7 +570,7 @@ async function buildDataset(client: pg.Client, selectedKeys: string[], rootLimit
         const fkValue = row[edge.fkColumn];
         if (fkValue == null) continue;
         const parentPk = parentIndex.get(String(fkValue));
-        if (parentPk != null) pushRelation(`${edge.parentKey}:${parentPk}`, `${edge.childKey}:${childPk}`);
+        if (parentPk != null) addHop(edge.childKey, childPk, edge.parentKey, parentPk);
       }
     } else {
       const a = tableRows.get(edge.aKey)!;
@@ -588,14 +582,88 @@ async function buildDataset(client: pg.Client, selectedKeys: string[], rootLimit
       for (const [aValue, bValue] of pairs) {
         const aPk = aIndex.get(aValue);
         const bPk = bIndex.get(bValue);
-        if (aPk != null && bPk != null) pushRelation(`${edge.aKey}:${aPk}`, `${edge.bKey}:${bPk}`);
+        if (aPk != null && bPk != null) addHop(edge.aKey, aPk, edge.bKey, bPk);
       }
     }
   }
 
+  /** Shortest table-level path between two tables over the FK graph (BFS), or null. */
+  const tablePath = (fromKey: string, toKey: string): string[] | null => {
+    const previous = new Map<string, string>([[fromKey, fromKey]]);
+    const queue = [fromKey];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current === toKey) {
+        const path = [toKey];
+        while (path[0] !== fromKey) path.unshift(previous.get(path[0])!);
+        return path;
+      }
+      for (const next of tableNeighbors.get(current) ?? []) {
+        if (!previous.has(next)) {
+          previous.set(next, current);
+          queue.push(next);
+        }
+      }
+    }
+    return null;
+  };
+
+  const rowLabel = (tableKey: string, pk: string): string => {
+    const table = tableRows.get(tableKey)!;
+    const row = table.rows.get(pk);
+    const raw = row && table.plan.labelColumn ? sanitizeValue(row[table.plan.labelColumn]) : null;
+    const label = raw != null && String(raw).trim() !== '' ? String(raw) : `${tableKey.split('.')[1]} ${pk.slice(0, 8)}`;
+    // ";" is the format's list separator — it can't appear inside a value.
+    return label.replace(/;/g, ',');
+  };
+
+  const objectKey = order[order.length - 1];
+  const objectTable = tableRows.get(objectKey)!;
+  const objectName = objectKey.split('.')[1];
+  const orbitKeys = order.slice(0, -1);
+  const orbitPaths = new Map<string, string[] | null>(orbitKeys.map((k) => [k, tablePath(objectKey, k)]));
+  for (const [key, path] of orbitPaths) {
+    if (path == null) warnings.push(`Tabela ${key} não tem caminho de FKs até ${objectKey} — coluna ficará vazia.`);
+  }
+
+  const header = [
+    ...orbitKeys.map((k) => k.split('.')[1]),
+    `_${objectName}`,
+    ...objectTable.plan.propertyColumns.map((c) => `_${c}`),
+  ];
+  const lines = [header.map(csvField).join(',')];
+
+  for (const [pk, row] of objectTable.rows) {
+    const cells: string[] = [];
+    for (const key of orbitKeys) {
+      const path = orbitPaths.get(key);
+      if (!path) {
+        cells.push('');
+        continue;
+      }
+      let current = new Set([pk]);
+      for (let i = 0; i + 1 < path.length; i++) {
+        const hop = hops.get(`${path[i]}>${path[i + 1]}`);
+        const next = new Set<string>();
+        for (const p of current) for (const q of hop?.get(p) ?? []) next.add(q);
+        current = next;
+        if (current.size === 0) break;
+      }
+      cells.push([...current].map((targetPk) => rowLabel(key, targetPk)).join(';'));
+    }
+    cells.push(rowLabel(objectKey, pk));
+    for (const col of objectTable.plan.propertyColumns) {
+      const v = sanitizeValue(row[col]);
+      cells.push(v == null ? '' : String(v));
+    }
+    lines.push(cells.map(csvField).join(','));
+  }
+
+  if (objectTable.rows.size === 0) warnings.push(`A tabela-objeto ${objectKey} não retornou linhas.`);
+
   return {
-    dataset: { name: client.database ?? 'postgres', entityTypes, entities, relations },
-    ringOrder: order,
+    name: client.database ?? 'postgres',
+    csv: lines.join('\n'),
     stats: Object.fromEntries(order.map((key) => [key, tableRows.get(key)!.rows.size])),
     warnings,
   };
@@ -676,7 +744,7 @@ export function orbitPgPlugin(): Plugin {
 
           if (req.url === '/dataset') {
             const rowLimit = Number(body.rowLimit) > 0 ? Math.min(Number(body.rowLimit), 500) : DEFAULT_ROOT_LIMIT;
-            const result = await withClient(connectionString, (client) => buildDataset(client, tables, rowLimit));
+            const result = await withClient(connectionString, (client) => buildColumnarCsv(client, tables, rowLimit));
             return sendJson(res, 200, result);
           }
 

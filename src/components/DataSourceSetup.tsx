@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import type { Dataset } from '../model/types';
-import { buildPhotoDataset } from '../data/photoCsv';
+import { buildColumnarDataset } from '../data/columnar';
+import sampleMonumentsCsv from '../data/sample-monuments.csv?raw';
 import samplePhotosCsv from '../data/sample-photos.csv?raw';
 
 export interface DataSource {
@@ -28,9 +29,9 @@ interface ErdInfo {
   skippedComposite: number;
 }
 
-interface DatasetResponse {
-  dataset: Dataset;
-  ringOrder: string[];
+interface ColumnarCsvResponse {
+  name: string;
+  csv: string;
   stats: Record<string, number>;
   warnings: string[];
 }
@@ -49,17 +50,41 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 const tableKey = (t: TableInfo) => `${t.schema}.${t.name}`;
 
 /**
- * Landing screen for picking the data source: the bundled sample dataset, or a live Postgres
- * database — connection string → pick tables of interest → FK summary → explore.
+ * Landing screen for picking the data source. Everything funnels into the single columnar
+ * format (see src/data/columnar.ts): bundled sample CSVs, an uploaded CSV, or a live Postgres
+ * database — which acts as a built-in converter emitting that same CSV (downloadable).
  */
-export function DataSourceSetup({ sample, onLoaded }: { sample: DataSource; onLoaded: (source: DataSource) => void }) {
+export function DataSourceSetup({ onLoaded }: { onLoaded: (source: DataSource) => void }) {
   const [connectionString, setConnectionString] = useState('');
   const [tables, setTables] = useState<TableInfo[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [erd, setErd] = useState<ErdInfo | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [busy, setBusy] = useState<'connect' | 'explore' | null>(null);
+  const [busy, setBusy] = useState<'connect' | 'explore' | 'download' | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  function loadCsv(text: string, name: string) {
+    setError(null);
+    setWarnings([]);
+    try {
+      const result = buildColumnarDataset(text, name);
+      // The setup screen unmounts right away, so surface warnings on the console too.
+      if (result.warnings.length > 0) console.warn('orbit/columnar:', result.warnings);
+      onLoaded({ dataset: result.dataset, ringOrder: result.ringOrder });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function handleCsvFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    file
+      .text()
+      .then((text) => loadCsv(text, file.name.replace(/\.csv$/i, '')))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    event.target.value = '';
+  }
 
   async function connect() {
     setBusy('connect');
@@ -97,19 +122,37 @@ export function DataSourceSetup({ sample, onLoaded }: { sample: DataSource; onLo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
+  async function fetchColumnarCsv(): Promise<ColumnarCsvResponse> {
+    const result = await post<ColumnarCsvResponse>('dataset', { connectionString, tables: [...selected] });
+    if (result.warnings.length > 0) setWarnings(result.warnings);
+    return result;
+  }
+
   async function explore() {
     setBusy('explore');
     setError(null);
     setWarnings([]);
     try {
-      const result = await post<DatasetResponse>('dataset', { connectionString, tables: [...selected] });
-      if (result.ringOrder.length === 0 || result.dataset.entities.length === 0) {
-        setWarnings(result.warnings);
-        setError('Nenhuma linha encontrada para as tabelas selecionadas.');
-        return;
-      }
-      if (result.warnings.length > 0) console.warn('orbit/pg:', result.warnings);
-      onLoaded({ dataset: result.dataset, ringOrder: result.ringOrder });
+      const result = await fetchColumnarCsv();
+      loadCsv(result.csv, result.name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadCsv() {
+    setBusy('download');
+    setError(null);
+    try {
+      const result = await fetchColumnarCsv();
+      const url = URL.createObjectURL(new Blob([result.csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${result.name}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -126,57 +169,34 @@ export function DataSourceSetup({ sample, onLoaded }: { sample: DataSource; onLo
     });
   }
 
-  function loadPhotoCsv(text: string, name: string) {
-    setError(null);
-    setWarnings([]);
-    try {
-      const result = buildPhotoDataset(text, name);
-      // The setup screen unmounts right away, so surface warnings on the console too.
-      if (result.warnings.length > 0) console.warn('orbit/csv:', result.warnings);
-      onLoaded({ dataset: result.dataset, ringOrder: result.ringOrder });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  function handleCsvFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    file
-      .text()
-      .then((text) => loadPhotoCsv(text, file.name.replace(/\.csv$/i, '')))
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-    event.target.value = '';
-  }
-
   return (
     <div className="source-setup">
       <div className="source-card">
         <h1 className="source-title">Orbit Explorer</h1>
-        <p className="source-subtitle">Escolha a fonte de dados</p>
-
-        <button className="source-sample" onClick={() => onLoaded(sample)}>
-          Dataset de exemplo — Monumentos
-        </button>
-
-        <div className="source-divider">ou um CSV de fotos (ex.: exportado do Immich)</div>
+        <p className="source-subtitle">
+          Tudo entra pelo mesmo formato: um CSV onde cada coluna é uma órbita e cada linha um objeto
+        </p>
 
         <p className="source-hint source-hint-tight">
-          Uma linha por foto: <code>data, local, pessoas, tags, albuns, arquivo</code> (multivalores com “;”). Vira
-          órbitas Ano → Mês → Dia → Localização → Pessoa → Tag → Álbum → Foto. Query pronta em{' '}
-          <code>scripts/immich-photos.sql</code>.
+          Cabeçalho nomeia as órbitas (ordem = ordem dos anéis); colunas <code>_prefixadas</code> são metadados do
+          objeto (a primeira dá nome e rótulo ao anel de objetos); célula vazia = sem relação; multi-valores com{' '}
+          <code>;</code>; coluna <code>data</code> ISO vira Ano → Mês → Dia. Detalhes no README.
         </p>
+
         <div className="source-connect">
           <label className="source-button source-file">
             Carregar CSV…
             <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} hidden />
           </label>
-          <button className="source-button" onClick={() => loadPhotoCsv(samplePhotosCsv, 'Fotos (exemplo)')}>
-            Usar exemplo pequeno
+          <button className="source-button" onClick={() => loadCsv(sampleMonumentsCsv, 'Monumentos')}>
+            Exemplo: monumentos
+          </button>
+          <button className="source-button" onClick={() => loadCsv(samplePhotosCsv, 'Fotos (exemplo)')}>
+            Exemplo: fotos
           </button>
         </div>
 
-        <div className="source-divider">ou conecte a um Postgres</div>
+        <div className="source-divider">ou converta um Postgres para o formato</div>
 
         <div className="source-connect">
           <input
@@ -202,7 +222,8 @@ export function DataSourceSetup({ sample, onLoaded }: { sample: DataSource; onLo
         {tables && (
           <>
             <p className="source-hint">
-              {tables.length} tabelas — marque as de interesse (a conexão é somente leitura):
+              {tables.length} tabelas — marque as de interesse (a conexão é somente leitura; a mais externa vira o
+              objeto):
             </p>
             <ul className="source-tables">
               {tables.map((t) => {
@@ -233,13 +254,18 @@ export function DataSourceSetup({ sample, onLoaded }: { sample: DataSource; onLo
               </div>
             )}
 
-            <button
-              className="source-button source-explore"
-              disabled={selected.size === 0 || busy != null}
-              onClick={explore}
-            >
-              {busy === 'explore' ? 'Montando órbitas…' : `Explorar ${selected.size} tabela(s)`}
-            </button>
+            <div className="source-connect source-actions">
+              <button
+                className="source-button source-explore"
+                disabled={selected.size === 0 || busy != null}
+                onClick={explore}
+              >
+                {busy === 'explore' ? 'Montando órbitas…' : `Explorar ${selected.size} tabela(s)`}
+              </button>
+              <button className="source-button" disabled={selected.size === 0 || busy != null} onClick={downloadCsv}>
+                {busy === 'download' ? 'Gerando…' : 'Baixar CSV'}
+              </button>
+            </div>
           </>
         )}
       </div>

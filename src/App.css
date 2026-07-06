@@ -473,11 +473,13 @@
 }
 
 .source-explore {
-  display: block;
-  width: 100%;
-  margin-top: 16px;
+  flex: 1;
   border-color: var(--brass);
   color: var(--brass-bright);
+}
+
+.source-actions {
+  margin-top: 16px;
 }
 
 .ring-hide-button {
